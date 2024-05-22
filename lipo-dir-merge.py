@@ -36,26 +36,38 @@ def merge_libs(src1, src2, dst):
 
 # Find the library at `src` in the `secondary_path` and then
 # merge the two versions, creating a universal binary at `dst`.
-def find_and_merge_libs(src, dst):
+def find_and_merge_libs(src, dst, follow_symlinks):
     rel_path = os.path.relpath(src, primary_path)
     lib_in_secondary = os.path.join(secondary_path, rel_path)
 
     if os.path.exists(lib_in_secondary) == False:
-        print("Lib not found in secondary source: {lib_in_secondary}")
+        print(f"Lib not found in secondary source: {lib_in_secondary}")
+        shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
         return
     
     merge_libs(src, lib_in_secondary, dst)
+
+def is_mach_o(file_path):
+    # 构建命令，调用系统命令file来获取文件类型信息
+    cmd = ['file', file_path]
+    # 执行命令
+    result = subprocess.run(cmd, stdout=subprocess.PIPE)
+    # 获取命令执行结果
+    output = result.stdout.decode('utf-8')
+    # 判断文件类型是否包含"Mach-O"
+    return "Mach-O" in output
 
 # Either copy the file at `src` to `dst`, or, if it is a static
 # library, merge it with its version from `secondary_path` and
 # write the universal binary to `dst`.
 def copy_file_or_merge_libs(src, dst, *, follow_symlinks=True):
     _, file_ext = os.path.splitext(src)
-    if file_ext == ".a":
-        find_and_merge_libs(src, dst)
+    if file_ext == '.a' or is_mach_o(src):
+        find_and_merge_libs(src, dst, follow_symlinks)
     else:
         shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
 
+shutil.copytree(secondary_path, destination_path, dirs_exist_ok = True)
 # Use copytree to do most of the work, with our own `copy_function` doing a little bit
 # of magic in case of static libraries.
-shutil.copytree(primary_path, destination_path, copy_function=copy_file_or_merge_libs)
+shutil.copytree(primary_path, destination_path, copy_function=copy_file_or_merge_libs, dirs_exist_ok = True)
